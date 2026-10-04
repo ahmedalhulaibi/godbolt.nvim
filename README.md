@@ -11,7 +11,7 @@ A powerful Neovim plugin that brings Compiler Explorer (godbolt.org) functionali
 - **LLVM pipeline viewer**: Step through optimization passes for both C/C++ files and LLVM IR
 - **Link-Time Optimization (LTO)**: Compile and link multiple files with whole-program optimization
 - **LTO pipeline visualization**: Watch cross-module optimizations in action (70+ passes)
-- **Multi-language support**: C, C++, Swift, and LLVM IR
+- **Multi-language support**: C, C++, Zig, Swift, and LLVM IR
 - **Per-file compiler arguments**: Use comments to specify flags per file
 - **Automatic output detection**: Intelligently detects output type from compiler flags
 - **Clean output**: Separates warnings/errors from the main output buffer
@@ -21,7 +21,7 @@ A powerful Neovim plugin that brings Compiler Explorer (godbolt.org) functionali
 ```lua
 -- 1. Install the plugin using your package manager
 {
-  'lanza/godbolt.nvim',
+  'ahmedalhulaibi/godbolt.nvim',
   config = function()
     require('godbolt').setup()
   end,
@@ -49,7 +49,7 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
 {
-  'lanza/godbolt.nvim',
+  'ahmedalhulaibi/godbolt.nvim',
   config = function()
     require('godbolt').setup({
       -- Your configuration here (see Configuration section below)
@@ -62,7 +62,7 @@ Using [packer.nvim](https://github.com/wbthomason/packer.nvim):
 
 ```lua
 use {
-  'lanza/godbolt.nvim',
+  'ahmedalhulaibi/godbolt.nvim',
   config = function()
     require('godbolt').setup()
   end
@@ -73,6 +73,7 @@ use {
 - Neovim 0.7+
 - `clang`/`clang++` for C/C++ compilation
 - `swiftc` for Swift compilation (optional)
+- `zig` with LLVM backend support for Zig compilation (optional)
 - `opt` (LLVM optimizer) for LLVM IR optimization and pipeline viewer (optional)
 
 ## Lua API
@@ -113,12 +114,14 @@ require('godbolt').setup({
   -- Compiler paths (optional, uses these defaults)
   clang = 'clang',
   swiftc = 'swiftc',
+  zig = 'zig',
   opt = 'opt',
 
   -- Default compiler arguments
   cpp_args = '-std=c++20',
   c_args = '-std=c17',
   swift_args = '',
+  zig_args = '',
   ll_args = '',
 
   -- Window configuration (optional)
@@ -881,7 +884,34 @@ If you see "No passes captured" with `optnone` warning:
 
 - **C/C++** (`.c`, `.cpp`) → Uses `clang`/`clang++`
 - **Swift** (`.swift`) → Uses `swiftc` with automatic demangling
+- **Zig** (`.zig`) → Uses local `zig build-obj` for assembly or LLVM IR
 - **LLVM IR** (`.ll`) → Uses `opt` for optimization passes
+
+### Zig
+
+Open a saved `.zig` file, then run:
+
+```vim
+:Godbolt                              " Assembly (Debug mode)
+:Godbolt -O ReleaseFast               " Optimized assembly
+:Godbolt -O ReleaseSafe -femit-llvm-ir " Optimized LLVM IR
+```
+
+Use `export fn` to retain functions in the output. First-line comments work:
+
+```zig
+// godbolt: -O ReleaseFast -femit-llvm-ir
+export fn add(a: i32, b: i32) i32 {
+    return a + b;
+}
+```
+
+`zig` sets the compiler path; `zig_args` sets default flags. The plugin forces
+LLVM code generation and retains debug symbols for source mapping. It reads
+temporary `.s`/`.ll` output, then deletes it; no object file is emitted.
+Zig compilation does not use `compile_commands.json` or the hosted Compiler
+Explorer API. Direct Zig pipeline and LTO commands are not supported; for
+pipeline analysis, emit a `.ll` file with Zig and open it with a compatible `opt`.
 
 ## Tips and Tricks
 

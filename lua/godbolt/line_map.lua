@@ -301,7 +301,8 @@ function M.setup(source_bufnr, output_bufnr, output_type, config)
 
   -- Parse based on output type
   if output_type == "asm" then
-    state.src_to_out, state.out_to_src = assembly_parser.parse(output_lines)
+    local source_file = vim.api.nvim_buf_get_name(source_bufnr)
+    state.src_to_out, state.out_to_src = assembly_parser.parse(output_lines, source_file)
   elseif output_type == "llvm" then
     state.src_to_out, state.out_to_src = llvm_ir_parser.parse(output_lines)
   else

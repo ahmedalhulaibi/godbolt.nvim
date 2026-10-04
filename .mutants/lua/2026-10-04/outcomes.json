@@ -1,0 +1,36 @@
+{
+  "method": "bounded manual mutation: one edit per temporary repository copy; tests/zig_spec.lua",
+  "zig_version": "0.17.0",
+  "results": [
+    {
+      "mutant": "zig_routing",
+      "file": "lua/godbolt.lua",
+      "exit_code": 1,
+      "status": "killed"
+    },
+    {
+      "mutant": "llvm_emission",
+      "file": "lua/godbolt.lua",
+      "exit_code": 1,
+      "status": "killed"
+    },
+    {
+      "mutant": "temporary_cleanup",
+      "file": "lua/godbolt.lua",
+      "exit_code": 1,
+      "status": "killed"
+    },
+    {
+      "mutant": "source_identity",
+      "file": "lua/godbolt/line_map.lua",
+      "exit_code": 1,
+      "status": "killed"
+    },
+    {
+      "mutant": "foreign_locations",
+      "file": "lua/godbolt/parsers/assembly.lua",
+      "exit_code": 1,
+      "status": "killed"
+    }
+  ]
+}

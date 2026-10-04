@@ -4,7 +4,7 @@
 vim.api.nvim_create_user_command('Godbolt', function(opts)
   local godbolt = require('godbolt')
   -- Default to LLVM IR when using compile_commands.json
-  godbolt.godbolt(opts.args, { output = "llvm" })
+  godbolt.godbolt(opts.args, { output = vim.fn.expand("%:e") == "zig" and "auto" or "llvm" })
 end, {
   nargs = '*',
   desc = 'Compile current file to assembly/IR using Godbolt-style compilation'

@@ -64,6 +64,8 @@ end
 ---@field cpp_args string Default C++ compiler arguments
 ---@field swift_args string Default Swift compiler arguments
 ---@field swiftc string Path to swiftc compiler
+---@field zig string Path to Zig compiler
+---@field zig_args string Default Zig compiler arguments
 ---@field opt string Path to opt tool
 ---@field ll_args string Default LLVM IR arguments
 ---@field window_cmd string|nil Custom window command
@@ -81,6 +83,9 @@ M.config = {
 
   swift_args = "",
   swiftc = "swiftc",
+
+  zig = "zig",
+  zig_args = "",
 
   opt = "opt",
   ll_args = "",
@@ -208,7 +213,7 @@ local function detect_output_type(all_args, file)
   end
 
   -- Check for various emit flags (using plain string find for simple cases)
-  if all_args:find("-emit-llvm", 1, true) then
+  if all_args:find("-emit-llvm", 1, true) or all_args:find("-femit-llvm-ir", 1, true) then
     return "llvm"
   elseif all_args:find("-emit-cir", 1, true) then
     return "cir"
@@ -284,11 +289,12 @@ function M.godbolt(args_str, opts)
 
   local file = vim.fn.expand("%:p") -- Get absolute path
   local source_bufnr = vim.fn.bufnr("%")
+  local is_zig = file:match("%.zig$") ~= nil
   local compile_directory = nil     -- Working directory from compile_commands.json
   local cc_compiler = nil           -- Compiler from compile_commands.json
 
   -- Try to get compiler flags from compile_commands.json if no args provided
-  if args_str == "" or args_str == "-g" then
+  if not is_zig and (args_str == "" or args_str == "-g") then
     local project = require('godbolt.project')
     local compile_commands = require('godbolt.compile_commands')
 
@@ -362,7 +368,10 @@ function M.godbolt(args_str, opts)
 
   -- Determine compiler and base args based on file type
   local compiler, lang_args, postprocess
-  if cc_compiler then
+  if is_zig then
+    compiler = vim.fn.shellescape(M.config.zig) .. " build-obj"
+    lang_args = M.config.zig_args
+  elseif cc_compiler then
     -- Use compiler from compile_commands.json
     compiler = cc_compiler
     lang_args = "" -- compile_commands.json already includes language args
@@ -388,44 +397,55 @@ function M.godbolt(args_str, opts)
   -- Combine ALL arguments for output type detection
   local all_args = table.concat({ args_str, buffer_args, lang_args }, " ")
   local output_type = detect_output_type(all_args, file)
+  if is_zig and output_type == "asm" and output_preference == "llvm" then
+    output_type = "llvm"
+  end
 
   -- Build command arguments
   local cmd_args = {}
-  table.insert(cmd_args, string.format('"%s"', file))
-  if args_str ~= "" then table.insert(cmd_args, args_str) end
-  table.insert(cmd_args, "-S")
+  local emitted_file = nil
+  if is_zig then
+    emitted_file = vim.fn.tempname() .. (output_type == "llvm" and ".ll" or ".s")
+    cmd_args = {
+      vim.fn.shellescape(file), lang_args, buffer_args, args_str,
+      "-fllvm", "-fno-strip", "-fno-emit-bin",
+      (output_type == "llvm" and "-femit-llvm-ir=" or "-femit-asm=") .. vim.fn.shellescape(emitted_file),
+    }
+  else
+    table.insert(cmd_args, string.format('"%s"', file))
+    if args_str ~= "" then table.insert(cmd_args, args_str) end
+    table.insert(cmd_args, "-S")
 
-  -- Add compiler-specific flags for better introspection
-  if not file:match("%.ll$") and not file:match("%.swift$") then
-    table.insert(cmd_args, "-fno-asynchronous-unwind-tables")
-    table.insert(cmd_args, "-fno-discard-value-names") -- Keep SSA value names
-    table.insert(cmd_args, "-fstandalone-debug")       -- Complete debug info
+    -- Add compiler-specific flags for better introspection
+    if not file:match("%.ll$") and not file:match("%.swift$") then
+      table.insert(cmd_args, "-fno-asynchronous-unwind-tables")
+      table.insert(cmd_args, "-fno-discard-value-names") -- Keep SSA value names
+      table.insert(cmd_args, "-fstandalone-debug")       -- Complete debug info
+    end
+
+    if file:match("%.swift$") then
+      table.insert(cmd_args, "-Xllvm --x86-asm-syntax=intel")
+    elseif not file:match("%.ll$") then
+      table.insert(cmd_args, "-masm=intel")
+    end
+
+    if lang_args ~= "" then table.insert(cmd_args, lang_args) end
+    if buffer_args ~= "" then table.insert(cmd_args, buffer_args) end
+
+    -- Check if user has explicitly disabled debug info
+    local all_user_args = table.concat({ args_str, buffer_args, lang_args }, " ")
+    if has_debug_disabling_flags(all_user_args) then
+      print("[Godbolt] Warning: Debug-disabling flags detected (-g0). Line mapping may not work.")
+    end
+
+    -- Add -g LAST to ensure it's not overridden by user flags
+    -- opt doesn't support -g flag and will error out
+    if not file:match("%.ll$") then
+      table.insert(cmd_args, "-g")
+    end
+
+    table.insert(cmd_args, "-o -")
   end
-
-  if file:match("%.swift$") then
-    table.insert(cmd_args, "-Xllvm --x86-asm-syntax=intel")
-  elseif not file:match("%.ll$") then
-    table.insert(cmd_args, "-masm=intel")
-  end
-
-  if lang_args ~= "" then table.insert(cmd_args, lang_args) end
-  if buffer_args ~= "" then table.insert(cmd_args, buffer_args) end
-
-  -- Check if user has explicitly disabled debug info
-  local all_user_args = table.concat({ args_str, buffer_args, lang_args }, " ")
-  if has_debug_disabling_flags(all_user_args) then
-    print("[Godbolt] Warning: Debug-disabling flags detected (-g0). Line mapping may not work.")
-  end
-
-  -- Add -g LAST to ensure it's not overridden by user flags
-  -- This is critical for line mapping to work
-  -- NOTE: Only add -g for compilers (clang, swiftc), NOT for opt (LLVM IR optimizer)
-  -- opt doesn't support -g flag and will error out
-  if not file:match("%.ll$") then
-    table.insert(cmd_args, "-g")
-  end
-
-  table.insert(cmd_args, "-o -")
 
   local cmd = ".!" .. compiler .. " " .. table.concat(cmd_args, " ")
   if postprocess then
@@ -463,6 +483,15 @@ function M.godbolt(args_str, opts)
 
   -- Execute command and capture stdout
   local output = vim.fn.system(cmd_with_redirect)
+  local exit_code = vim.v.shell_error
+  if emitted_file then
+    if exit_code == 0 and vim.fn.filereadable(emitted_file) == 1 then
+      output = table.concat(vim.fn.readfile(emitted_file), "\n")
+    else
+      output = ""
+    end
+    vim.fn.delete(emitted_file)
+  end
 
   -- Read stderr from temp file
   local stderr_lines = vim.fn.filereadable(stderr_file) == 1 and vim.fn.readfile(stderr_file) or {}
