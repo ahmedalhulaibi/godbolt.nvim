@@ -36,3 +36,7 @@ and line-zero exclusion.
 - Final boundary suite: 16 passed. Seven targeted mutants killed, zero survived;
   report and reproducible runner: `.mutants/lua/2026-10-05-zig-build/`.
   Assessment ran in a user systemd scope with a 4 GiB memory cap and no swap.
+- Full Plenary regression: 183 passed, 15 failed; failure names exactly match
+  the unchanged-fork baseline. No new failing tests.
+- Installed host LazyVim configuration: plugin loaded at startup and both actual
+  `<leader>cga`/`<leader>cgi` callbacks opened output focused on `zig-wc` source.
