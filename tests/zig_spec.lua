@@ -68,3 +68,12 @@ describe('assembly source identity', function()
     assert.are.same({ [2] = 2, [3] = 2, [4] = 2, [7] = 2, [8] = 2, [9] = 2 }, reverse)
   end)
 end)
+
+describe('LLVM source identity', function()
+  it('follows lexical scopes and excludes instructions from other source files', function()
+    local forward, reverse = require('godbolt.parsers.llvm_ir').parse(
+      vim.fn.readfile('testdata/inputs/mapping.ll'), '/tmp/example.zig')
+    assert.are.same({ [2] = { 2 } }, forward)
+    assert.are.same({ [2] = { line = 2, column = 5 } }, reverse)
+  end)
+end)

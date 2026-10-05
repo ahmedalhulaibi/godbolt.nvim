@@ -2,10 +2,40 @@ local M = {}
 
 -- Parse LLVM IR using treesitter to extract line mappings
 -- Returns: src_to_ir, ir_to_src tables
-function M.parse(ir_lines)
+function M.parse(ir_lines, source_file)
   local src_to_ir = {} -- source_line → [ir_line_nums]
   local ir_to_src = {} -- ir_line_num → source_line
   local metadata = {}  -- metadata_id → {line, column}
+  local nodes = {}
+  local scope_files = {}
+  if source_file then
+    source_file = vim.fn.fnamemodify(source_file, ':p')
+    for _, line in ipairs(ir_lines) do
+      local id, body = line:match('^!(%d+)%s*=%s*(.*)')
+      if id then nodes[id] = body end
+    end
+  end
+
+  local function scope_file(id, visited)
+    if not id or not nodes[id] then return nil end
+    if scope_files[id] then return scope_files[id] end
+    visited = visited or {}
+    if visited[id] then return nil end
+    visited[id] = true
+    local node = nodes[id]
+    local path = nil
+    if node:match('^!DIFile%(') then
+      local name = node:match('filename:%s*"([^"]+)"')
+      local directory = node:match('directory:%s*"([^"]*)"') or ''
+      if name then
+        path = vim.fn.fnamemodify(name:sub(1, 1) == '/' and name or (directory .. '/' .. name), ':p')
+      end
+    else
+      path = scope_file(node:match('file:%s*!(%d+)') or node:match('scope:%s*!(%d+)'), visited)
+    end
+    scope_files[id] = path
+    return path
+  end
 
   -- First pass: Build metadata table by parsing !DILocation entries
   for ir_line_num, line in ipairs(ir_lines) do
@@ -13,7 +43,9 @@ function M.parse(ir_lines)
     -- !21 = !DILocation(line: 2, column: 18, scope: !10)
     local meta_id, src_line, src_col = line:match("^!(%d+)%s*=%s*!DILocation%(.-line:%s*(%d+).-column:%s*(%d+)")
 
-    if meta_id and src_line then
+    local scope = line:match('scope:%s*!(%d+)')
+    if meta_id and src_line and tonumber(src_line) > 0 and
+        (not source_file or scope_file(scope) == source_file) then
       metadata[tonumber(meta_id)] = {
         line = tonumber(src_line),
         column = src_col and tonumber(src_col) or nil,

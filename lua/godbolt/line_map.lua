@@ -304,7 +304,7 @@ function M.setup(source_bufnr, output_bufnr, output_type, config)
     local source_file = vim.api.nvim_buf_get_name(source_bufnr)
     state.src_to_out, state.out_to_src = assembly_parser.parse(output_lines, source_file)
   elseif output_type == "llvm" then
-    state.src_to_out, state.out_to_src = llvm_ir_parser.parse(output_lines)
+    state.src_to_out, state.out_to_src = llvm_ir_parser.parse(output_lines, vim.api.nvim_buf_get_name(source_bufnr))
   else
     -- Unknown output type, skip mapping
     return
@@ -377,6 +377,30 @@ function M.setup(source_bufnr, output_bufnr, output_type, config)
 
   -- Initial cursor highlight based on current cursor position
   update_source_highlights(config)
+end
+
+function M.focus_source_line(source_line)
+  local mapped = state.src_to_out and state.src_to_out[source_line]
+  if not mapped or not mapped[1] then return end
+  local output_line = mapped[1]
+  local display_map = vim.b[state.output_bufnr].godbolt_line_map
+  if display_map then
+    output_line = nil
+    for displayed, original in pairs(display_map) do
+      if original == mapped[1] then output_line = displayed; break end
+    end
+  end
+  if not output_line then return end
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_buf(win) == state.output_bufnr then
+      vim.api.nvim_win_call(win, function()
+        vim.api.nvim_win_set_cursor(win, { output_line, 0 })
+        vim.cmd('normal! zz')
+        update_output_highlights({ auto_scroll = false })
+      end)
+      break
+    end
+  end
 end
 
 return M

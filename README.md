@@ -122,6 +122,7 @@ require('godbolt').setup({
   c_args = '-std=c17',
   swift_args = '',
   zig_args = '',
+  zig_build_args = {},
   ll_args = '',
 
   -- Window configuration (optional)
@@ -912,6 +913,42 @@ temporary `.s`/`.ll` output, then deletes it; no object file is emitted.
 Zig compilation does not use `compile_commands.json` or the hosted Compiler
 Explorer API. Direct Zig pipeline and LTO commands are not supported; for
 pipeline analysis, emit a `.ll` file with Zig and open it with a compatible `opt`.
+
+### Build-aware Zig keymaps
+
+Requires Neovim 0.10+. Configure through your plugin manager:
+
+```lua
+{
+  'ahmedalhulaibi/godbolt.nvim',
+  lazy = false,
+  opts = {
+    zig_args = '-O ReleaseFast',
+    zig_build_args = { '-Doptimize=ReleaseFast' },
+  },
+  keys = {
+    { '<leader>cga', function() require('godbolt').godbolt_zig('asm') end, desc = 'Zig assembly' },
+    { '<leader>cgi', function() require('godbolt').godbolt_zig('llvm') end, desc = 'Zig LLVM IR' },
+  },
+}
+```
+
+The keymaps save the current Zig file and find the nearest ancestor `build.zig`.
+With a build file, they run `zig build godbolt-asm` or `zig build godbolt-ir`
+asynchronously. Those steps must install `godbolt/output.s` or
+`godbolt/output.ll`, relative to the build's install prefix. The plugin uses a
+temporary prefix, reads source-associated code, and deletes the temporary output.
+Large globals and unrelated function bodies are excluded from the view; LLVM
+output is a source-focused excerpt, not a standalone compilable module.
+The output cursor starts at instructions associated with the source cursor when
+that line has a mapping. Unused or optimized-away code may have no output.
+
+Without `build.zig`, the same keys use standalone `zig build-obj` with `zig_args`.
+A failed project build does **not** trigger that fallback. A missing step, missing
+artifact, or an edit during compilation reports an error instead of showing stale
+or incorrectly configured output. The executable configured by `zig` must select
+the project's supported Zig version (a mise shim with project-local configuration
+works). A buffer-local `vim.b.godbolt_build_args` list overrides `zig_build_args`.
 
 ## Tips and Tricks
 

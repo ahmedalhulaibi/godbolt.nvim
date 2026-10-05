@@ -66,6 +66,7 @@ end
 ---@field swiftc string Path to swiftc compiler
 ---@field zig string Path to Zig compiler
 ---@field zig_args string Default Zig compiler arguments
+---@field zig_build_args string[] Default arguments for zig build
 ---@field opt string Path to opt tool
 ---@field ll_args string Default LLVM IR arguments
 ---@field window_cmd string|nil Custom window command
@@ -86,6 +87,7 @@ M.config = {
 
   zig = "zig",
   zig_args = "",
+  zig_build_args = {},
 
   opt = "opt",
   ll_args = "",
@@ -397,8 +399,8 @@ function M.godbolt(args_str, opts)
   -- Combine ALL arguments for output type detection
   local all_args = table.concat({ args_str, buffer_args, lang_args }, " ")
   local output_type = detect_output_type(all_args, file)
-  if is_zig and output_type == "asm" and output_preference == "llvm" then
-    output_type = "llvm"
+  if is_zig and (output_preference == "asm" or output_preference == "llvm") then
+    output_type = output_preference
   end
 
   -- Build command arguments
@@ -408,7 +410,7 @@ function M.godbolt(args_str, opts)
     emitted_file = vim.fn.tempname() .. (output_type == "llvm" and ".ll" or ".s")
     cmd_args = {
       vim.fn.shellescape(file), lang_args, buffer_args, args_str,
-      "-fllvm", "-fno-strip", "-fno-emit-bin",
+      "-fllvm", "-fno-strip", "-fno-emit-bin", "-fno-emit-asm", "-fno-emit-llvm-ir",
       (output_type == "llvm" and "-femit-llvm-ir=" or "-femit-asm=") .. vim.fn.shellescape(emitted_file),
     }
   else
@@ -452,19 +454,6 @@ function M.godbolt(args_str, opts)
     cmd = cmd .. " " .. postprocess
   end
 
-  -- Create new window and set up buffer
-  if M.config.window_cmd then
-    vim.cmd(M.config.window_cmd)
-  else
-    vim.cmd("vertical botright new")
-  end
-
-  set_output_filetype(output_type)
-  vim.bo.buftype = "nofile"
-  vim.bo.bufhidden = "hide"
-  vim.bo.swapfile = false
-  vim.wo.number = false
-
   -- Store and execute command
   vim.g.last_godbolt_cmd = cmd
 
@@ -506,8 +495,26 @@ function M.godbolt(args_str, opts)
     end
   end
 
-  -- Insert stdout into buffer
-  local output_lines = vim.split(output, "\n")
+  return M.show_output(vim.split(output, "\n"), source_bufnr, output_type, actual_cmd)
+end
+
+---@param output_lines string[]
+---@param source_bufnr integer
+---@param output_type string
+---@param actual_cmd string
+---@param source_line integer|nil
+function M.show_output(output_lines, source_bufnr, output_type, actual_cmd, source_line)
+  if M.config.window_cmd then
+    vim.cmd(M.config.window_cmd)
+  else
+    vim.cmd("vertical botright new")
+  end
+
+  set_output_filetype(output_type)
+  vim.bo.buftype = "nofile"
+  vim.bo.bufhidden = "hide"
+  vim.bo.swapfile = false
+  vim.wo.number = false
 
   -- Filter debug metadata for display if configured
   local display_lines = output_lines
@@ -550,7 +557,9 @@ function M.godbolt(args_str, opts)
       if ok then
         -- Schedule to run after buffer is fully initialized
         vim.schedule(function()
+          if not vim.api.nvim_buf_is_valid(source_bufnr) or not vim.api.nvim_buf_is_valid(output_bufnr) then return end
           line_map.setup(source_bufnr, output_bufnr, output_type, M.config.line_mapping)
+          if source_line then line_map.focus_source_line(source_line) end
 
           -- Add variable name annotations for LLVM IR
           if output_type == "llvm" and M.config.display and M.config.display.annotate_variables ~= false then
@@ -569,6 +578,12 @@ function M.godbolt(args_str, opts)
 
   -- Trigger autocommand event
   vim.cmd("doautocmd User Godbolt")
+  return output_bufnr
+end
+
+---@param output_type 'asm'|'llvm'
+function M.godbolt_zig(output_type)
+  return require('godbolt.zig_build').compile(output_type)
 end
 
 -- Run LLVM optimization pipeline and show passes

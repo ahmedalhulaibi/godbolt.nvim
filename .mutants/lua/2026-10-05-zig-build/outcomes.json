@@ -1,0 +1,55 @@
+{
+  "method": "bounded manual mutation: one edit per temporary copy, 16 boundary tests",
+  "compiler": "0.16.0",
+  "results": [
+    {
+      "mutant": "project_discovery",
+      "file": "lua/godbolt/zig_build.lua",
+      "exit_code": 1,
+      "failed_tests": 6,
+      "status": "killed"
+    },
+    {
+      "mutant": "build_step",
+      "file": "lua/godbolt/zig_build.lua",
+      "exit_code": 1,
+      "failed_tests": 4,
+      "status": "killed"
+    },
+    {
+      "mutant": "temporary_cleanup",
+      "file": "lua/godbolt/zig_build.lua",
+      "exit_code": 1,
+      "failed_tests": 4,
+      "status": "killed"
+    },
+    {
+      "mutant": "source_scope",
+      "file": "lua/godbolt/parsers/llvm_ir.lua",
+      "exit_code": 1,
+      "failed_tests": 3,
+      "status": "killed"
+    },
+    {
+      "mutant": "initial_focus",
+      "file": "lua/godbolt.lua",
+      "exit_code": 1,
+      "failed_tests": 4,
+      "status": "killed"
+    },
+    {
+      "mutant": "assembly_source_filter",
+      "file": "lua/godbolt/zig_output.lua",
+      "exit_code": 1,
+      "failed_tests": 2,
+      "status": "killed"
+    },
+    {
+      "mutant": "llvm_source_filter",
+      "file": "lua/godbolt/zig_output.lua",
+      "exit_code": 1,
+      "failed_tests": 2,
+      "status": "killed"
+    }
+  ]
+}
