@@ -123,6 +123,7 @@ require('godbolt').setup({
   swift_args = '',
   zig_args = '',
   zig_build_args = {},
+  panes = { auto_refresh = true, debounce_ms = 120, cache_entries = 16, cache_paths = {} },
   ll_args = '',
 
   -- Window configuration (optional)
@@ -929,11 +930,13 @@ Requires Neovim 0.10+. Configure through your plugin manager:
   keys = {
     { '<leader>cga', function() require('godbolt').godbolt_zig('asm') end, desc = 'Zig assembly' },
     { '<leader>cgi', function() require('godbolt').godbolt_zig('llvm') end, desc = 'Zig LLVM IR' },
+    { '<leader>cgr', function() require('godbolt.panes').refresh() end, desc = 'Refresh Zig panes (force)' },
+    { '<leader>cgq', function() require('godbolt.panes').close() end, desc = 'Close Zig panes' },
   },
 }
 ```
 
-The keymaps save the current Zig file and find the nearest ancestor `build.zig`.
+The assembly and IR keys save the active Zig source and find the nearest ancestor `build.zig`.
 With a build file, they run `zig build godbolt-asm` or `zig build godbolt-ir`
 asynchronously. Those steps must install `godbolt/output.s` or
 `godbolt/output.ll`, relative to the build's install prefix. The plugin uses a
@@ -945,10 +948,37 @@ that line has a mapping. Unused or optimized-away code may have no output.
 
 Without `build.zig`, the same keys use standalone `zig build-obj` with `zig_args`.
 A failed project build does **not** trigger that fallback. A missing step, missing
-artifact, or an edit during compilation reports an error instead of showing stale
-or incorrectly configured output. The executable configured by `zig` must select
+artifact reports an error. Edits and file switches invalidate pending results;
+stale output is never displayed. The executable configured by `zig` must select
 the project's supported Zig version (a mise shim with project-local configuration
 works). A buffer-local `vim.b.godbolt_build_args` list overrides `zig_build_args`.
+
+### Persistent Zig panes and cache
+
+Each tab has one assembly pane and one IR pane. Re-running a key reuses its pane.
+Both follow the active source file. Opening a file from an output pane redirects
+it to the source window. Output is read-only, non-file-backed, and named
+`XDG.zig.asm` / `XDG.zig.llvmir`; unique URIs prevent basename collisions.
+
+Cursor movement in any of the three panes synchronizes the other two through
+source locations. Unmapped instructions do not move the other cursors. Optimized
+or inlined code may have missing or multiple locations.
+
+Switching files never saves modified source. Unsaved and non-Zig buffers clear
+stale output. Saving refreshes visible panes; hidden buffers and inactive tabs
+defer compilation until shown. Cursor moves between panes never compile.
+
+An in-memory LRU cache keeps 16 results by default, keyed by content hashes,
+source path, compiler version, and arguments. Project inputs are non-ignored Git
+files, or the project tree without Git; cache/install directories are excluded.
+File digests are reused only when size, inode, mtime, and ctime agree. Returning
+to unchanged files restores cached output in the same windows.
+
+Declare external or ignored build inputs in `panes.cache_paths` (files or
+directories, relative to the build root or absolute). Arbitrary environment-
+dependent build logic cannot be inferred; use the force-refresh key for it.
+`panes.auto_refresh = false` makes updates manual. The raw `:Godbolt` command
+retains its one-shot behavior.
 
 ## Tips and Tricks
 

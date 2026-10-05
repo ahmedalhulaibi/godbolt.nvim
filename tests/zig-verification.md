@@ -40,3 +40,25 @@ and line-zero exclusion.
   the unchanged-fork baseline. No new failing tests.
 - Installed host LazyVim configuration: plugin loaded at startup and both actual
   `<leader>cga`/`<leader>cgi` callbacks opened output focused on `zig-wc` source.
+
+## Persistent panes and cache — 2026-10-05
+
+- 24 boundary tests passed: previous 16 plus eight pane/cache tests. Includes
+  three-way cursor sync, repeated runs, source identity, stale callbacks,
+  unsaved-source handling, active-tab hidden buffers, inactive tabs, input and
+  argument hashes, external inputs, LRU eviction, and force refresh.
+- Seeded 120-command lifecycle sequence checks pane count, read-only buffers,
+  source identity, and rejection of foreign output after every transition.
+  This is a bounded model/invariant test, not a Hegel PBT; Hegel has no Lua API.
+- Ten targeted mutants killed, zero survivors. Isolated copies; user systemd
+  scope, 4 GiB memory cap, no swap. Runner/report:
+  `.mutants/lua/2026-10-05-panes/`.
+- Full Plenary regression: 191 passed, the same 15 baseline failures, no test
+  errors. Run with `GODBOLT_TEST_ZIG` set to Zig 0.16.0.
+- Actual host LazyVim: local checkout loaded at startup; real assembly/IR keys
+  created three windows. Switching `main.zig` → `whitespace.zig` kept both pane
+  buffer/window IDs. Returning to `main.zig` and invoking both keys caused no
+  additional builds (four total). Names/read-only flags and default code-action
+  configuration verified. Public plugin pin unchanged; local checkout override.
+- Lua syntax load passed. Active LSP probe: no errors reported, six paths
+  inconclusive; this is not a confirmed clean diagnostic result.

@@ -88,6 +88,7 @@ describe('Zig build-aware compilation', function()
           assert.are.equal(0, vim.fn.isdirectory(prefix), 'Temporary install prefix must be deleted')
         end
       end)
+      require('godbolt.panes').close()
       require('godbolt.line_map').cleanup()
       vim.notify = notify
       godbolt.config = original

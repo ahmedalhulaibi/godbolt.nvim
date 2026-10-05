@@ -67,6 +67,7 @@ end
 ---@field zig string Path to Zig compiler
 ---@field zig_args string Default Zig compiler arguments
 ---@field zig_build_args string[] Default arguments for zig build
+---@field panes table Persistent Zig pane configuration
 ---@field opt string Path to opt tool
 ---@field ll_args string Default LLVM IR arguments
 ---@field window_cmd string|nil Custom window command
@@ -88,6 +89,7 @@ M.config = {
   zig = "zig",
   zig_args = "",
   zig_build_args = {},
+  panes = { auto_refresh = true, debounce_ms = 120, cache_entries = 16, cache_paths = {} },
 
   opt = "opt",
   ll_args = "",
@@ -487,7 +489,7 @@ function M.godbolt(args_str, opts)
   vim.fn.delete(stderr_file)
 
   -- Show stderr (warnings/errors) in message log
-  if #stderr_lines > 0 then
+  if #stderr_lines > 0 and not opts.capture then
     -- Print the command first for context
     print(actual_cmd)
     for _, line in ipairs(stderr_lines) do
@@ -495,6 +497,14 @@ function M.godbolt(args_str, opts)
     end
   end
 
+  if opts.capture then
+    return {
+      lines = exit_code == 0 and vim.split(output, "\n") or nil,
+      command = actual_cmd,
+      error = exit_code ~= 0 and (table.concat(stderr_lines, "\n") ~= "" and table.concat(stderr_lines, "\n") or
+        "Compilation failed (exit " .. exit_code .. ")") or nil,
+    }
+  end
   return M.show_output(vim.split(output, "\n"), source_bufnr, output_type, actual_cmd)
 end
 
@@ -583,7 +593,7 @@ end
 
 ---@param output_type 'asm'|'llvm'
 function M.godbolt_zig(output_type)
-  return require('godbolt.zig_build').compile(output_type)
+  return require('godbolt.panes').open(output_type)
 end
 
 -- Run LLVM optimization pipeline and show passes

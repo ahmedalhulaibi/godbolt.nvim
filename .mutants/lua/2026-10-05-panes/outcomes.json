@@ -1,0 +1,65 @@
+{
+  "method": "bounded manual mutation; isolated copies; eight boundary tests",
+  "results": [
+    {
+      "mutant": "cache_hit",
+      "file": "lua/godbolt/pane_cache.lua",
+      "failed_tests": 3,
+      "status": "killed"
+    },
+    {
+      "mutant": "source_identity",
+      "file": "lua/godbolt/pane_cache.lua",
+      "failed_tests": 4,
+      "status": "killed"
+    },
+    {
+      "mutant": "content_hash",
+      "file": "lua/godbolt/pane_cache.lua",
+      "failed_tests": 3,
+      "status": "killed"
+    },
+    {
+      "mutant": "argument_hash",
+      "file": "lua/godbolt/pane_cache.lua",
+      "failed_tests": 1,
+      "status": "killed"
+    },
+    {
+      "mutant": "visibility",
+      "file": "lua/godbolt/panes.lua",
+      "failed_tests": 1,
+      "status": "killed"
+    },
+    {
+      "mutant": "stale_result",
+      "file": "lua/godbolt/panes.lua",
+      "failed_tests": 1,
+      "status": "killed"
+    },
+    {
+      "mutant": "source_sync",
+      "file": "lua/godbolt/panes.lua",
+      "failed_tests": 1,
+      "status": "killed"
+    },
+    {
+      "mutant": "output_sync",
+      "file": "lua/godbolt/panes.lua",
+      "failed_tests": 1,
+      "status": "killed"
+    },
+    {
+      "mutant": "readonly",
+      "file": "lua/godbolt/panes.lua",
+      "failed_tests": 2,
+      "status": "killed"
+    },
+    {
+      "mutant": "cache_eviction",
+      "file": "lua/godbolt/pane_cache.lua",
+      "failed_tests": 1,
+      "status": "killed"
+    }
+  ]
+}

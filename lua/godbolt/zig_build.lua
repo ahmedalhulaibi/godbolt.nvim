@@ -1,44 +1,25 @@
 local M = {}
-local running = {}
 
-local function fail(message)
-  vim.notify('[Godbolt] ' .. message, vim.log.levels.ERROR)
-end
-
-function M.compile(output_type)
-  if output_type ~= 'asm' and output_type ~= 'llvm' then
-    fail('Output must be asm or llvm')
-    return
-  end
+function M.compile(output_type, opts)
+  if not opts then return require('godbolt.panes').open(output_type) end
   local godbolt = require('godbolt')
-  local source = vim.api.nvim_get_current_buf()
+  local source = opts.source
   local file = vim.api.nvim_buf_get_name(source)
-  if not file:match('%.zig$') or vim.bo[source].buftype ~= '' then
-    fail('Open a saved Zig source file first')
-    return
+  local changedtick = vim.api.nvim_buf_get_changedtick(source)
+  local function current()
+    return vim.api.nvim_buf_is_valid(source) and vim.api.nvim_buf_get_name(source) == file and
+      vim.api.nvim_buf_get_changedtick(source) == changedtick and opts.current()
   end
-  if running[source] then
-    fail('A build is already running for this buffer')
-    return
-  end
-  if vim.bo[source].modified then
-    local ok, err = pcall(vim.cmd, 'write')
-    if not ok then fail(tostring(err)); return end
-  end
-  local source_line = vim.api.nvim_win_get_cursor(0)[1]
   local build_file = vim.fs.find('build.zig', { path = vim.fs.dirname(file), upward = true, type = 'file' })[1]
   if not build_file then
-    local args = output_type == 'llvm' and '-femit-llvm-ir' or '-femit-asm'
-    local output = godbolt.godbolt(args, { output = output_type })
-    vim.schedule(function()
-      if output and vim.api.nvim_buf_is_valid(output) then
-        require('godbolt.line_map').focus_source_line(source_line)
-      end
+    local ok, result = pcall(vim.api.nvim_buf_call, source, function()
+      local args = output_type == 'llvm' and '-femit-llvm-ir' or '-femit-asm'
+      return godbolt.godbolt(args, { output = output_type, capture = true })
     end)
-    return output
+    opts.done(not current() and { cancelled = true } or (ok and result or { error = tostring(result) }))
+    return
   end
 
-  local root = vim.fs.dirname(build_file)
   local prefix = vim.fn.tempname()
   local step = output_type == 'llvm' and 'godbolt-ir' or 'godbolt-asm'
   local artifact = prefix .. '/godbolt/output.' .. (output_type == 'llvm' and 'll' or 's')
@@ -47,41 +28,33 @@ function M.compile(output_type)
   vim.list_extend(cmd, { '--prefix', prefix })
   local command = table.concat(vim.tbl_map(vim.fn.shellescape, cmd), ' ')
   vim.g.last_godbolt_cmd = command
-  running[source] = true
-  local changedtick = vim.api.nvim_buf_get_changedtick(source)
   vim.notify('[Godbolt] Building ' .. step, vim.log.levels.INFO)
-
-  local ok, err = pcall(vim.system, cmd, { cwd = root, text = true }, function(result)
+  local ok, err = pcall(vim.system, cmd, { cwd = vim.fs.dirname(build_file), text = true }, function(result)
     vim.schedule(function()
-      running[source] = nil
-      local lines = nil
-      local read_error = nil
-      if result.code == 0 and vim.fn.filereadable(artifact) == 1 then
+      local data = { command = command }
+      if not current() then
+        data.cancelled = true
+      elseif result.code ~= 0 then
+        data.error = 'Project build failed; no standalone fallback. Add the ' .. step ..
+          ' step to build.zig if missing.\n' .. (result.stderr or '') .. (result.stdout or '')
+      elseif vim.fn.filereadable(artifact) ~= 1 then
+        data.error = 'Build did not emit godbolt/output.' .. (output_type == 'llvm' and 'll' or 's')
+      else
         local read_ok, value = pcall(require('godbolt.zig_output').read, artifact, output_type, file)
-        if read_ok then lines = value else read_error = tostring(value) end
+        if read_ok then
+          data.lines = value
+          if not value then data.error = 'No emitted code for this file; it may be unused or optimized away.' end
+        else
+          data.error = tostring(value)
+        end
       end
       vim.fn.delete(prefix, 'rf')
-      if result.code ~= 0 then
-        fail('Project build failed; no standalone fallback. Add the ' .. step ..
-          ' step to build.zig if missing.\n' .. (result.stderr or '') .. (result.stdout or ''))
-        return
-      end
-      if not lines then
-        fail(read_error or 'No emitted code for this file. Check the build output, reachable functions, and optimization level.')
-        return
-      end
-      if not vim.api.nvim_buf_is_valid(source) or vim.api.nvim_buf_get_name(source) ~= file then return end
-      if vim.api.nvim_buf_get_changedtick(source) ~= changedtick then
-        fail('Source changed during compilation; run the keymap again')
-        return
-      end
-      godbolt.show_output(lines, source, output_type, command, source_line)
+      opts.done(data)
     end)
   end)
   if not ok then
-    running[source] = nil
     vim.fn.delete(prefix, 'rf')
-    fail(tostring(err))
+    opts.done({ error = tostring(err), command = command })
   end
 end
 
