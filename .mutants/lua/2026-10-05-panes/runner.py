@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -42,7 +43,7 @@ for name, file, old, new in mutants:
                  'status': 'killed' if status != 0 and failed > 0 else 'survived'}
         print(name, entry['status'], flush=True)
         results.append(entry)
-report = root / '.mutants/lua/2026-10-05-panes/outcomes.json'
+report = root / os.environ.get('GODBOLT_MUTATION_REPORT', '.mutants/lua/2026-10-05-panes/outcomes.json')
 report.write_text(json.dumps({'method': 'bounded manual mutation; isolated copies; eight boundary tests',
                              'results': results}, indent=2) + '\n')
 assert all(entry['status'] == 'killed' for entry in results)

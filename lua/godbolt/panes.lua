@@ -223,18 +223,67 @@ request = function(s, p)
         vim.notify('[Godbolt] ' .. data.error, vim.log.levels.ERROR)
         if not p.buf then s.panes[p.format] = nil end
       else
-        local ok, fingerprint = pcall(cache.fingerprint, source)
-        if not ok or fingerprint ~= s.key then
-          s.dirty = true
-          activate(s, s.source_win, source, true)
-          return
+        p.pending = true
+        local function verified(fingerprint, err)
+          p.pending = false
+          if not current() then
+            if p.again then request(s, p) end
+            return
+          end
+          if err or fingerprint ~= s.key then
+            s.dirty = true
+            activate(s, s.source_win, source, true)
+            return
+          end
+          cache.put(key, data)
+          render(s, p, data, key)
         end
-        cache.put(key, data)
-        render(s, p, data, key)
+        if data.fingerprint then verified(data.fingerprint)
+        else cache.fingerprint(source, verified) end
       end
     end,
   })
   s.internal = false
+end
+
+local validate
+validate = function(s)
+  if s.hash_pending or not live(s) then return end
+  local validation = s.validation
+  if not validation or not source_ok(s) then return end
+  s.hash_pending = true
+  cache.fingerprint(validation.source, function(key, err)
+    s.hash_pending = false
+    if not live(s) then return end
+    if s.validation ~= validation then validate(s); return end
+    if not source_ok(s) or vim.api.nvim_buf_get_changedtick(validation.source) ~= validation.tick then return end
+    local previous_key = s.key
+    s.key, s.hash_error = key, err
+    if key ~= previous_key and previous_key then
+      s.epoch = s.epoch + 1
+      for _, format in ipairs(formats) do
+        local p = s.panes[format]
+        if p then placeholder(s, p, '[Godbolt] Loading…'); p.again = true end
+      end
+    end
+    if err then
+      for _, format in ipairs(formats) do
+        local p = s.panes[format]
+        if p then
+          placeholder(s, p, '[Godbolt] ' .. err)
+          if not p.buf then s.panes[format] = nil end
+        end
+      end
+      vim.notify('[Godbolt] ' .. err, vim.log.levels.ERROR)
+      return
+    end
+    if not validation.automatic or config().panes.auto_refresh then
+      for _, format in ipairs(formats) do
+        local p = s.panes[format]
+        if p then request(s, p) end
+      end
+    end
+  end)
 end
 
 activate = function(s, win, source, automatic)
@@ -248,48 +297,35 @@ activate = function(s, win, source, automatic)
     local p = s.panes[format]
     if p and available(s, p) then has_visible = true end
   end
-  local key = nil
-  s.hash_error = nil
-  if source_ok(s) and has_visible then
-    local ok, value = pcall(cache.fingerprint, source)
-    if ok then key = value else s.hash_error = tostring(value) end
-  end
-  changed = changed or s.key ~= key
-  s.key, s.dirty = key, false
-  if not changed then
-    if automatic and config().panes.auto_refresh then
-      for _, format in ipairs(formats) do
-        local p = s.panes[format]
-        if p and p.ready_key ~= (key and key .. ':' .. format) then request(s, p) end
+  local eligible = source_ok(s) and has_visible
+  local invalidate = changed or not eligible or s.dirty or not s.key
+  s.dirty = false
+  s.debounce = s.debounce + 1
+  local generation = s.debounce
+  s.validation = eligible and { source = source, tick = tick, automatic = automatic } or nil
+  if invalidate then
+    s.epoch = s.epoch + 1
+    s.key = nil
+    clear(previous_source, s.static_ns)
+    clear(previous_source, s.cursor_ns)
+    local message = not vim.api.nvim_buf_get_name(source):match('%.zig$') and '[Godbolt] Open a Zig source file' or
+      (vim.bo[source].modified and '[Godbolt] Unsaved changes: save or run the keymap to refresh' or '[Godbolt] Loading…')
+    for _, format in ipairs(formats) do
+      local p = s.panes[format]
+      if p then
+        placeholder(s, p, message)
+        p.again = true
+        if automatic then p.focus = false end
       end
     end
-    return
   end
-  s.epoch, s.debounce = s.epoch + 1, s.debounce + 1
-  local generation = s.debounce
-  clear(previous_source, s.static_ns)
-  clear(previous_source, s.cursor_ns)
-  local message = s.hash_error and ('[Godbolt] ' .. s.hash_error) or
-    (not vim.api.nvim_buf_get_name(source):match('%.zig$') and '[Godbolt] Open a Zig source file' or
-    (vim.bo[source].modified and '[Godbolt] Unsaved changes: save or run the keymap to refresh' or '[Godbolt] Loading…')
-    )
-  for _, format in ipairs(formats) do
-    local p = s.panes[format]
-    if p then
-      placeholder(s, p, message)
-      p.again = true
-      if automatic then p.focus = false end
-    end
-  end
-  if automatic and config().panes.auto_refresh then
+  if not eligible then return end
+  if automatic then
     vim.defer_fn(function()
       if not live(s) or s.debounce ~= generation then return end
-      for _, format in ipairs(formats) do
-        local p = s.panes[format]
-        if p then request(s, p) end
-      end
+      validate(s)
     end, config().panes.debounce_ms)
-  end
+  else validate(s) end
 end
 
 local function entered(args)
@@ -443,16 +479,7 @@ function M.open(format)
     if other ~= format and s.panes[other] then s.panes[other].focus = false end
   end
   activate(s, win, buf, false)
-  if not s.key then
-    if not p.buf then s.panes[format] = nil end
-    vim.notify('[Godbolt] ' .. (s.hash_error or 'Cannot identify build inputs'), vim.log.levels.ERROR)
-    return
-  end
   require('godbolt.highlight').setup()
-  for _, kind in ipairs(formats) do
-    local pane = s.panes[kind]
-    if pane then request(s, pane) end
-  end
   return p.buf
 end
 

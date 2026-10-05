@@ -1,0 +1,14 @@
+{
+  "results": [
+    {
+      "mutant": "ui_fingerprint",
+      "failed_tests": 2,
+      "status": "killed"
+    },
+    {
+      "mutant": "ui_compiler",
+      "failed_tests": 2,
+      "status": "killed"
+    }
+  ]
+}

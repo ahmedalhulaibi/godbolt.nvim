@@ -29,7 +29,7 @@ local function fixture(test)
   vim.notify = function(message, level) if level == vim.log.levels.ERROR then errors[#errors + 1] = message end end
   godbolt.setup({ zig = '/usr/bin/true', zig_args = '', zig_build_args = {},
     panes = { debounce_ms = 0 }, line_mapping = { enabled = true, auto_scroll = false, throttle_ms = 0 } })
-  local ctx = { a = a, b = b, text = text, dir = dir, jobs = jobs, calls = calls, win = source_win, tab = tab }
+  local ctx = { a = a, b = b, text = text, dir = dir, jobs = jobs, calls = calls, errors = errors, win = source_win, tab = tab }
   function ctx.switch(file)
     vim.api.nvim_set_current_win(source_win)
     vim.cmd('edit ' .. vim.fn.fnameescape(file))
@@ -47,7 +47,7 @@ local function fixture(test)
     end
     return result
   end
-  function ctx.complete(index)
+  function ctx.complete(index, error)
     local job = table.remove(jobs, index or 1)
     assert.is_not_nil(job)
     local lines = vim.fn.readfile('testdata/inputs/pane-output.' .. (job.format == 'llvm' and 'll' or 's'))
@@ -55,10 +55,12 @@ local function fixture(test)
       lines[i] = line:gsub('{{directory}}', function() return vim.fs.dirname(job.file) end)
         :gsub('{{filename}}', function() return vim.fn.fnamemodify(job.file, ':t') end)
     end
-    job.opts.done({ lines = lines, command = 'fixture compiler' })
+    job.opts.done(error and { error = error } or { lines = lines, command = 'fixture compiler' })
     pump()
   end
   function ctx.finish()
+    -- Give asynchronous fingerprint completion a turn before draining the fake compiler.
+    vim.wait(100, function() return false end, 5)
     local count = 0
     while #jobs > 0 do count = count + 1; assert.is_true(count < 30); ctx.complete() end
   end
@@ -72,7 +74,13 @@ local function fixture(test)
     vim.api.nvim_exec_autocmds('CursorMoved', { modeline = false })
     pump()
   end
-  local ok, err = pcall(function() ctx.switch(a); test(ctx) end)
+  local ok, err = pcall(function()
+    ctx.switch(a)
+    local warmed = false
+    cache.fingerprint(vim.api.nvim_get_current_buf(), function() warmed = true end)
+    assert.is_true(vim.wait(5000, function() return warmed end, 5))
+    test(ctx)
+  end)
   vim.api.nvim_set_current_tabpage(tab)
   panes.close()
   cache.clear()
@@ -135,7 +143,9 @@ describe('persistent Zig panes', function()
       c.switch(c.b)
       assert.are.equal(2, #c.jobs)
       c.switch(c.a)
+      c.complete(1, 'Old source compilation failed')
       c.finish()
+      assert.are.equal(0, #c.errors, 'Stale build errors must not affect the active source')
       assert.are.equal(4, #c.calls)
       for _, p in pairs(c.outputs()) do assert.are.equal(c.a, vim.api.nvim_buf_get_name(vim.b[p.buf].godbolt_source_bufnr)) end
       local disk = vim.fn.readfile(c.b)

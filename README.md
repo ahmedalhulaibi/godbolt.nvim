@@ -968,6 +968,11 @@ Switching files never saves modified source. Unsaved and non-Zig buffers clear
 stale output. Saving refreshes visible panes; hidden buffers and inactive tabs
 defer compilation until shown. Cursor moves between panes never compile.
 
+Input hashing, compiler commands (including standalone fallback), and large
+artifact scans run in isolated headless Neovim workers, not the editor's UI
+thread. Validation requests coalesce when switching files quickly. Workers are
+started on demand and stopped when the editor exits; pane updates remain local.
+
 An in-memory LRU cache keeps 16 results by default, keyed by content hashes,
 source path, compiler version, and arguments. Project inputs are non-ignored Git
 files, or the project tree without Git; cache/install directories are excluded.

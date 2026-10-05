@@ -33,7 +33,7 @@ local function collect(path, files)
   end
 end
 
-function M.fingerprint(source)
+function M.fingerprint_sync(source)
   local config = require('godbolt').config
   local file = vim.api.nvim_buf_get_name(source)
   local build = vim.fs.find('build.zig', { path = vim.fs.dirname(file), upward = true, type = 'file' })[1]
@@ -87,5 +87,13 @@ function M.put(key, data)
   end
 end
 
-function M.clear() entries, hashes = {}, {} end
+function M.fingerprint(source, done)
+  require('godbolt.background').call('fingerprint', source, function(result) done(result.key, result.error) end)
+end
+
+function M.clear_local() entries, hashes = {}, {} end
+function M.clear()
+  M.clear_local()
+  if package.loaded['godbolt.background'] then require('godbolt.background').clear() end
+end
 return M

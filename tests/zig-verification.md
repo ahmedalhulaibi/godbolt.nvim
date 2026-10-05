@@ -62,3 +62,22 @@ and line-zero exclusion.
   configuration verified. Public plugin pin unchanged; local checkout override.
 - Lua syntax load passed. Active LSP probe: no errors reported, six paths
   inconclusive; this is not a confirmed clean diagnostic result.
+
+## Nonblocking pane builds — 2026-10-05
+
+- Reproduced synchronous input fingerprinting in `bf87b58`. Green fix moves
+  hashing, standalone compilation, and large artifact scans into persistent,
+  isolated headless workers. UI validation is asynchronous and coalesced;
+  changed-source results and errors are discarded.
+- 26 boundary tests passed, including slow-tool assembly/IR fixtures: trigger
+  returns within 150 ms, normal-mode input executes while work is pending,
+  timer callbacks continue, and no UI stall exceeds 200 ms.
+- Actual `zig-wc` cold smoke, including its 196 MiB corpus: trigger 1.83 ms;
+  708 UI timer callbacks; largest timer gap 22.15 ms; three windows after both
+  assembly and IR complete. Existing user files left unchanged.
+- Full Plenary: 193 passed, same 15 baseline failures, no test errors.
+- Two responsiveness mutants and ten existing pane/cache mutants killed.
+  Isolated copies, 4 GiB user systemd scopes, no swap. Reports:
+  `.mutants/lua/2026-10-05-responsive/`; pane reassessment uses
+  `GODBOLT_MUTATION_REPORT=.mutants/lua/2026-10-05-responsive/pane-outcomes.json`.
+- Lua syntax passed; active LSP reported no errors, six paths inconclusive.

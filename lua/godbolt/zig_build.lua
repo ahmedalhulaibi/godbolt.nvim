@@ -2,6 +2,14 @@ local M = {}
 
 function M.compile(output_type, opts)
   if not opts then return require('godbolt.panes').open(output_type) end
+  vim.notify('[Godbolt] Compiling Zig ' .. output_type, vim.log.levels.INFO)
+  require('godbolt.background').call(output_type, opts.source, function(result)
+    if result.command then vim.g.last_godbolt_cmd = result.command end
+    opts.done(opts.current() and result or { cancelled = true })
+  end)
+end
+
+function M.compile_worker(output_type, opts)
   local godbolt = require('godbolt')
   local source = opts.source
   local file = vim.api.nvim_buf_get_name(source)
