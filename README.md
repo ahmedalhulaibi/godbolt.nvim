@@ -891,6 +891,9 @@ If you see "No passes captured" with `optnone` warning:
 
 ### Zig
 
+For project integration, see [Zig project setup](docs/zig.README.md): build steps,
+Neovim keymaps, compiler selection, and troubleshooting.
+
 Open a saved `.zig` file, then run:
 
 ```vim
