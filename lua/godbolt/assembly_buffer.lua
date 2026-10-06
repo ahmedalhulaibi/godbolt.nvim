@@ -13,10 +13,14 @@ function M.detach(p)
   end
 end
 
-function M.cleanup(p)
-  M.detach(p)
+function M.remove_files(p)
   if p.temp_dir then vim.fn.delete(p.temp_dir, 'rf') end
   p.temp_dir, p.file = nil, nil
+end
+
+function M.cleanup(p)
+  M.detach(p)
+  M.remove_files(p)
 end
 
 function M.write(p, source, lines)

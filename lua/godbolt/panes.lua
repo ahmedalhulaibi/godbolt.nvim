@@ -472,7 +472,7 @@ local function install()
   end })
   vim.api.nvim_create_autocmd('VimLeavePre', { group = group, callback = function()
     for _, s in pairs(sessions) do
-      for _, p in pairs(s.panes) do if p.format == 'asm' then assembly.cleanup(p) end end
+      for _, p in pairs(s.panes) do if p.format == 'asm' then assembly.remove_files(p) end end
     end
   end })
 end
