@@ -964,6 +964,11 @@ Cursor movement in any of the three panes synchronizes the other two through
 source locations. Unmapped instructions do not move the other cursors. Optimized
 or inlined code may have missing or multiple locations.
 
+Bright `▶` gutter markers identify every selected instruction in both output
+panes, including inactive panes. Their fixed gutters do not shift the code.
+Unmapped source lines clear the markers. Override `GodboltSelectionSign` to
+customize the marker color; no additional background highlight is added.
+
 Switching files never saves modified source. Unsaved and non-Zig buffers clear
 stale output. Saving refreshes visible panes; hidden buffers and inactive tabs
 defer compilation until shown. Cursor moves between panes never compile.

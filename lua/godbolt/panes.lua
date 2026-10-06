@@ -38,10 +38,14 @@ end
 local function mark(buf, ns, lines, cursor, source_line)
   if not valid_buf(buf) then return end
   local count = vim.api.nvim_buf_line_count(buf)
+  local output_selection = cursor and vim.b[buf].godbolt_pane
   for _, line in ipairs(lines) do
     if line > 0 and line <= count then
       vim.api.nvim_buf_set_extmark(buf, ns, line - 1, 0, {
         line_hl_group = cursor and 'GodboltCursor' or ('GodboltLevel' .. ((((source_line or line) - 1) % 5) + 1)),
+        sign_text = output_selection and '▶' or nil,
+        sign_hl_group = output_selection and 'GodboltSelectionSign' or nil,
+        priority = output_selection and 200 or nil,
       })
     end
   end
@@ -147,6 +151,8 @@ local function render(s, p, data, key)
       vim.api.nvim_win_set_buf(p.win, p.buf)
       vim.wo[p.win].number = false
       vim.wo[p.win].relativenumber = false
+      vim.wo[p.win].signcolumn = 'yes:1'
+      vim.wo[p.win].statuscolumn = '%s'
     end
     if valid_win(p.win) then attach()
     else
@@ -376,6 +382,9 @@ end
 local function install()
   if group then return end
   group = vim.api.nvim_create_augroup('GodboltPanes', { clear = true })
+  vim.api.nvim_create_autocmd('ColorScheme', { group = group, callback = function()
+    require('godbolt.highlight').setup()
+  end })
   vim.api.nvim_create_autocmd({ 'BufEnter', 'TabEnter' }, { group = group, callback = entered })
   vim.api.nvim_create_autocmd({ 'BufWritePost', 'TextChanged', 'TextChangedI' }, {
     group = group, callback = function(args)

@@ -120,6 +120,57 @@ describe('persistent Zig panes', function()
     end)
   end)
 
+  it('marks every selected output row in fixed gutters without taking source focus', function()
+    fixture(function(c)
+      c.move(c.win, 2)
+      c.open('asm'); c.finish(); c.open('llvm'); c.finish()
+      local outputs = c.outputs()
+      local function signs(buf)
+        local rows = {}
+        for _, extmark in ipairs(vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true, type = 'sign' })) do
+          if extmark[4].sign_text then
+            assert.are.equal('▶ ', extmark[4].sign_text)
+            assert.are.equal('GodboltSelectionSign', extmark[4].sign_hl_group)
+            assert.are.equal(200, extmark[4].priority)
+            rows[#rows + 1] = extmark[2] + 1
+          end
+        end
+        table.sort(rows)
+        return rows
+      end
+      for _, p in pairs(outputs) do
+        assert.are.equal('yes:1', vim.wo[p.win].signcolumn)
+        assert.are.equal('%s', vim.wo[p.win].statuscolumn)
+      end
+      for _, case in ipairs({ { line = 4, asm = { 6, 7 }, llvm = { 5 } },
+        { line = 2, asm = { 3, 4 }, llvm = { 2 } }, { line = 1, asm = {}, llvm = {} } }) do
+        c.move(c.win, case.line)
+        assert.are.equal(c.win, vim.api.nvim_get_current_win())
+        assert.are.same(case.asm, signs(outputs.asm.buf))
+        assert.are.same(case.llvm, signs(outputs.llvm.buf))
+        for _, format in ipairs({ 'asm', 'llvm' }) do
+          local p = outputs[format]
+          for _, row in ipairs(case[format]) do
+            local gutter = vim.api.nvim_eval_statusline(vim.wo[p.win].statuscolumn, { winid = p.win, use_statuscol_lnum = row })
+            assert.are.equal('▶ ', gutter.str, 'Marker must render while source window retains focus')
+            assert.are.equal(2, gutter.width)
+          end
+        end
+        assert.are.same({}, signs(vim.api.nvim_win_get_buf(c.win)))
+      end
+      c.move(c.win, 4)
+      vim.api.nvim_set_hl(0, 'GodboltSelectionSign', {})
+      vim.api.nvim_exec_autocmds('ColorScheme', { modeline = false })
+      local highlight = vim.api.nvim_get_hl(0, { name = 'GodboltSelectionSign', link = false })
+      assert.is_true(highlight.bold)
+      assert.are.equal(vim.o.background == 'dark' and 0xffd75f or 0x9a4200, highlight.fg)
+      assert.are.same({ 6, 7 }, signs(outputs.asm.buf))
+      c.switch(c.text)
+      assert.are.same({}, signs(outputs.asm.buf))
+      assert.are.same({}, signs(outputs.llvm.buf))
+    end)
+  end)
+
   it('reuses both windows on file switches and restores unchanged results from cache', function()
     fixture(function(c)
       c.open('asm'); c.finish(); c.open('llvm'); c.finish()

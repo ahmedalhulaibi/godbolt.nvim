@@ -28,6 +28,12 @@ function M.setup()
 
   -- Cursor highlight - link to Visual for visibility
   vim.api.nvim_set_hl(0, "GodboltCursor", { link = "Visual" })
+  vim.api.nvim_set_hl(0, "GodboltSelectionSign", {
+    fg = bg == "dark" and "#ffd75f" or "#9a4200",
+    bold = true,
+    nocombine = true,
+    default = true,
+  })
 end
 
 -- Get shade name based on index (cycles through levels)

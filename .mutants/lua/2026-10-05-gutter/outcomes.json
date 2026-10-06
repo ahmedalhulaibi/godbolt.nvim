@@ -1,0 +1,24 @@
+{
+  "results": [
+    {
+      "mutant": "selection_sign",
+      "failed_tests": 1,
+      "status": "killed"
+    },
+    {
+      "mutant": "fixed_gutter",
+      "failed_tests": 1,
+      "status": "killed"
+    },
+    {
+      "mutant": "native_gutter",
+      "failed_tests": 1,
+      "status": "killed"
+    },
+    {
+      "mutant": "stale_signs",
+      "failed_tests": 1,
+      "status": "killed"
+    }
+  ]
+}

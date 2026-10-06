@@ -81,3 +81,18 @@ and line-zero exclusion.
   `.mutants/lua/2026-10-05-responsive/`; pane reassessment uses
   `GODBOLT_MUTATION_REPORT=.mutants/lua/2026-10-05-responsive/pane-outcomes.json`.
 - Lua syntax passed; active LSP reported no errors, six paths inconclusive.
+
+## Selection gutters — 2026-10-05
+
+- Selected assembly/IR instructions have bright `▶` extmark signs, fixed
+  one-column native gutters, and no additional background highlighting.
+  Source buffers keep their existing gutter. Theme changes restore the sign
+  group; users can override `GodboltSelectionSign`.
+- 27 boundary tests passed. New table checks all mapped rows, selection changes,
+  unmapped rows, source focus, non-Zig switching, and theme recovery. Native
+  status-column evaluation verifies actual inactive-pane glyph rendering.
+- Full Plenary: 194 passed, same 15 baseline failures, zero test errors.
+- Four targeted mutants killed: missing signs, hidden gutter, missing native
+  gutter, stale selection. Reports: `.mutants/lua/2026-10-05-gutter/`;
+  isolated copies in 4 GiB no-swap systemd scopes.
+- Lua syntax passed. Active LSP reported no errors; three paths inconclusive.
