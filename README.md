@@ -123,7 +123,7 @@ require('godbolt').setup({
   swift_args = '',
   zig_args = '',
   zig_build_args = {},
-  panes = { auto_refresh = true, debounce_ms = 120, cache_entries = 16, cache_paths = {} },
+  panes = { auto_refresh = true, debounce_ms = 120, cache_entries = 16, cache_paths = {}, asm_lsp = true },
   ll_args = '',
 
   -- Window configuration (optional)
@@ -960,8 +960,16 @@ works). A buffer-local `vim.b.godbolt_build_args` list overrides `zig_build_args
 
 Each tab has one assembly pane and one IR pane. Re-running a key reuses its pane.
 Both follow the active source file. Opening a file from an output pane redirects
-it to the source window. Output is read-only, non-file-backed, and named
-`XDG.zig.asm` / `XDG.zig.llvmir`; unique URIs prevent basename collisions.
+it to the source window. Output is read-only. Assembly uses a real temporary
+`XDG.zig.s` file; IR remains a virtual `XDG.zig.llvmir` buffer. Unique paths/URIs
+prevent basename collisions. The assembly file follows pane updates and is
+removed on pane close, buffer wipeout, tab close, or editor exit.
+
+If `asm-lsp` is installed, assembly panes attach automatically using the source
+project root and your `vim.lsp.config.asm_lsp` settings. Hover documentation is
+available despite the read-only buffer. Assembly diagnostics are suppressed for
+these filtered excerpts; normal assembly buffers are unaffected. Set
+`panes.asm_lsp = false` to disable attachment. LLVM IR uses no assembly server.
 
 Cursor movement in any of the three panes synchronizes the other two through
 source locations. Unmapped instructions do not move the other cursors. Optimized

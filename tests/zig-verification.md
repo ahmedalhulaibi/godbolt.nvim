@@ -96,3 +96,21 @@ and line-zero exclusion.
   gutter, stale selection. Reports: `.mutants/lua/2026-10-05-gutter/`;
   isolated copies in 4 GiB no-swap systemd scopes.
 - Lua syntax passed. Active LSP reported no errors; three paths inconclusive.
+
+## Assembly language server — 2026-10-06
+
+- Read-only assembly panes have synchronized temporary `.s` files and file URIs;
+  IR remains virtual. Paths are unique across same-basename source switches.
+  Pane/window, buffer, tab, and editor teardown delete temporary files.
+- Dedicated `asm_lsp` clients use source-project roots and existing Neovim
+  configuration. Closing clients are excluded from reuse. Pull diagnostics are
+  disabled and push diagnostics ignored for excerpts; normal clients unaffected.
+- 29 boundary tests passed with Zig 0.16.0 and asm-lsp 0.10.1. Real hover passes
+  before and after source switches; lifecycle test checks disk/buffer equality
+  and cleanup. Run with `GODBOLT_TEST_ASM_LSP=/path/to/asm-lsp` to include the
+  real-server boundary in `tests/panes_spec.lua`.
+- Full Plenary: 196 passed, same 15 baseline failures, zero test errors. Lua
+  syntax passed. Active LSP probe: no errors, four paths inconclusive.
+- Four targeted mutants killed: contents, cleanup, file URI, and source-project
+  root. Reports: `.mutants/lua/2026-10-06-assembly-lsp/`; isolated copies in
+  4 GiB no-swap systemd scopes.

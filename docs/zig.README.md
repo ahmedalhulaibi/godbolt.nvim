@@ -140,3 +140,25 @@ Do not supply `--prefix`; the plugin owns it.
   thread.
 
 No `compile_commands.json` is required for Zig.
+
+## Assembly language server
+
+Install `asm-lsp` (`:MasonInstall asm-lsp` or `cargo install asm-lsp`). Assembly
+panes use real temporary `<source>.zig.s` files and attach automatically when the
+server is available. Existing `vim.lsp.config.asm_lsp` settings are reused; root
+selection uses the source project, not the temporary directory. With the assembly
+pane focused, use `K` for instruction/register documentation.
+
+Files stay synchronized with the displayed excerpt and are deleted on pane,
+buffer, tab, or editor closure. Both output buffers stay read-only; IR remains
+virtual. Diagnostics from this dedicated client are hidden because excerpts
+need not assemble independently. To avoid assembler diagnostic subprocesses too,
+use your project `.asm-lsp.toml`:
+
+```toml
+[opts]
+diagnostics = false
+default_diagnostics = false
+```
+
+Set `panes.asm_lsp = false` to opt out. LLVM IR needs a separate language server.

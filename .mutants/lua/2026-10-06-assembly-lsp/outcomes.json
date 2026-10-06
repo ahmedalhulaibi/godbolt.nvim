@@ -1,0 +1,24 @@
+{
+  "results": [
+    {
+      "mutant": "file_contents",
+      "failed_tests": 1,
+      "status": "killed"
+    },
+    {
+      "mutant": "file_cleanup",
+      "failed_tests": 2,
+      "status": "killed"
+    },
+    {
+      "mutant": "file_uri",
+      "failed_tests": 1,
+      "status": "killed"
+    },
+    {
+      "mutant": "project_root",
+      "failed_tests": 1,
+      "status": "killed"
+    }
+  ]
+}

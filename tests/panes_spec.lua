@@ -7,6 +7,7 @@ local function pump() vim.wait(25, function() return false end, 5) end
 
 local function fixture(test)
   local original, compile, notify = vim.deepcopy(godbolt.config), compiler.compile, vim.notify
+  local lsp_config = vim.deepcopy(vim.lsp.config.asm_lsp or { cmd = { 'asm-lsp' } })
   panes.close()
   cache.clear()
   local parent_tab = vim.api.nvim_get_current_tabpage()
@@ -28,7 +29,7 @@ local function fixture(test)
   end
   vim.notify = function(message, level) if level == vim.log.levels.ERROR then errors[#errors + 1] = message end end
   godbolt.setup({ zig = '/usr/bin/true', zig_args = '', zig_build_args = {},
-    panes = { debounce_ms = 0 }, line_mapping = { enabled = true, auto_scroll = false, throttle_ms = 0 } })
+    panes = { debounce_ms = 0, asm_lsp = false }, line_mapping = { enabled = true, auto_scroll = false, throttle_ms = 0 } })
   local ctx = { a = a, b = b, text = text, dir = dir, jobs = jobs, calls = calls, errors = errors, win = source_win, tab = tab }
   function ctx.switch(file)
     vim.api.nvim_set_current_win(source_win)
@@ -87,6 +88,7 @@ local function fixture(test)
   vim.cmd('tabclose!')
   vim.api.nvim_set_current_tabpage(parent_tab)
   compiler.compile, vim.notify, godbolt.config = compile, notify, original
+  vim.lsp.config.asm_lsp = lsp_config
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     local name = vim.api.nvim_buf_get_name(buf)
     if name:sub(1, #dir) == dir then pcall(vim.api.nvim_buf_delete, buf, { force = true }) end
@@ -104,7 +106,7 @@ describe('persistent Zig panes', function()
       local outputs = c.outputs()
       assert.are.equal(3, #vim.api.nvim_tabpage_list_wins(c.tab))
       for format, p in pairs(outputs) do
-        assert.are.equal('XDG.zig.' .. (format == 'llvm' and 'llvmir' or 'asm'), vim.fn.fnamemodify(vim.api.nvim_buf_get_name(p.buf), ':t'))
+        assert.are.equal('XDG.zig.' .. (format == 'llvm' and 'llvmir' or 's'), vim.fn.fnamemodify(vim.api.nvim_buf_get_name(p.buf), ':t'))
         assert.are.equal('nofile', vim.bo[p.buf].buftype)
         assert.is_false(vim.bo[p.buf].modifiable)
         assert.is_true(vim.bo[p.buf].readonly)
@@ -117,6 +119,43 @@ describe('persistent Zig panes', function()
         assert.are.equal(case[5], vim.api.nvim_win_get_cursor(outputs.llvm.win)[1])
       end
       assert.are.equal(2, #c.calls)
+    end)
+  end)
+
+  it('keeps temporary assembly files synchronized and removes them across pane lifecycles', function()
+    fixture(function(c)
+      c.open('asm'); c.finish()
+      local first = c.outputs().asm
+      local path = vim.api.nvim_buf_get_name(first.buf)
+      assert.are.same(vim.api.nvim_buf_get_lines(first.buf, 0, -1, false), vim.fn.readfile(path))
+      assert.are.equal('file', vim.uri_from_bufnr(first.buf):match('^(%w+):'))
+      c.switch(c.b); c.finish()
+      local second = c.outputs().asm
+      local next_path = vim.api.nvim_buf_get_name(second.buf)
+      assert.are.equal(first.buf, second.buf)
+      assert.is_true(path ~= next_path, 'Equal basenames must not share a file URI')
+      assert.are.equal(0, vim.fn.filereadable(path))
+      assert.are.same(vim.api.nvim_buf_get_lines(second.buf, 0, -1, false), vim.fn.readfile(next_path))
+      c.switch(c.text)
+      assert.are.same(vim.api.nvim_buf_get_lines(second.buf, 0, -1, false), vim.fn.readfile(vim.api.nvim_buf_get_name(second.buf)))
+      c.switch(c.a); c.finish()
+      local closed = vim.api.nvim_buf_get_name(first.buf)
+      vim.api.nvim_win_close(first.win, true); pump()
+      assert.are.equal(0, vim.fn.filereadable(closed))
+      c.open('asm'); c.finish()
+      closed = vim.api.nvim_buf_get_name(c.outputs().asm.buf)
+      panes.close()
+      assert.are.equal(0, vim.fn.filereadable(closed))
+      c.open('asm'); c.finish()
+      closed = vim.api.nvim_buf_get_name(c.outputs().asm.buf)
+      vim.api.nvim_buf_delete(c.outputs().asm.buf, { force = true }); pump()
+      assert.are.equal(0, vim.fn.filereadable(closed))
+      vim.cmd('tabnew ' .. vim.fn.fnameescape(c.a))
+      panes.open('asm'); c.finish()
+      closed = vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())
+      assert.are.equal(1, vim.fn.filereadable(closed))
+      vim.cmd('tabclose!'); pump()
+      assert.are.equal(0, vim.fn.filereadable(closed))
     end)
   end)
 
@@ -339,3 +378,39 @@ describe('persistent Zig panes', function()
     end)
   end)
 end)
+
+if vim.env.GODBOLT_TEST_ASM_LSP then
+  describe('assembly language server', function()
+    it('provides hover through a real file URI rooted at the source project', function()
+      fixture(function(c)
+        godbolt.config.panes.asm_lsp = true
+        vim.lsp.config('asm_lsp', { cmd = { vim.env.GODBOLT_TEST_ASM_LSP }, root_dir = c.dir })
+        c.open('asm'); c.finish()
+        local p = c.outputs().asm
+        local client
+        for _, source in ipairs({ c.a, c.b, c.a }) do
+          c.switch(source); c.finish()
+          assert.is_true(vim.wait(30000, function()
+            client = vim.lsp.get_clients({ bufnr = p.buf, name = 'asm_lsp' })[1]
+            return client and client.initialized
+          end, 10))
+          assert.are.equal(c.dir, client.config.root_dir)
+          assert.is_true(client.config._godbolt_asm)
+          assert.are.equal(0, #vim.lsp.get_clients({ bufnr = p.buf, method = 'textDocument/diagnostic' }))
+          local response = client:request_sync('textDocument/hover', {
+            textDocument = { uri = vim.uri_from_bufnr(p.buf) }, position = { line = 2, character = 2 },
+          }, 30000, p.buf)
+          assert.is_not_nil(response)
+          assert.is_nil(response.err)
+          assert.is_not_nil(response.result)
+          assert.are.equal('markdown', response.result.contents.kind)
+          assert.is_true(#response.result.contents.value > 0)
+        end
+        local path = vim.api.nvim_buf_get_name(p.buf)
+        panes.close()
+        assert.are.equal(0, vim.fn.filereadable(path))
+        assert.is_true(vim.wait(5000, function() return client:is_stopped() end, 10))
+      end)
+    end)
+  end)
+end

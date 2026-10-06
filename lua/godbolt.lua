@@ -89,7 +89,7 @@ M.config = {
   zig = "zig",
   zig_args = "",
   zig_build_args = {},
-  panes = { auto_refresh = true, debounce_ms = 120, cache_entries = 16, cache_paths = {} },
+  panes = { auto_refresh = true, debounce_ms = 120, cache_entries = 16, cache_paths = {}, asm_lsp = true },
 
   opt = "opt",
   ll_args = "",

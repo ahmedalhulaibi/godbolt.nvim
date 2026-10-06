@@ -1,6 +1,7 @@
 local M = {}
 local sessions, formats = {}, { 'asm', 'llvm' }
 local cache = require('godbolt.pane_cache')
+local assembly = require('godbolt.assembly_buffer')
 local request, activate
 local group
 
@@ -109,8 +110,10 @@ end
 local function title(s, p)
   if not valid_buf(p.buf) then return end
   local file = valid_buf(s.source) and vim.api.nvim_buf_get_name(s.source) or '[no source]'
-  local name = file .. (p.format == 'llvm' and '.llvmir' or '.asm')
-  vim.api.nvim_buf_set_name(p.buf, 'godbolt://' .. s.tab .. '/' .. p.buf .. '/' .. name)
+  local name = file .. (p.format == 'llvm' and '.llvmir' or '.s')
+  if p.format == 'llvm' then
+    vim.api.nvim_buf_set_name(p.buf, 'godbolt://' .. s.tab .. '/' .. p.buf .. '/' .. name)
+  end
   vim.b[p.buf].godbolt_source_bufnr = s.source
   if visible(s, p) then vim.wo[p.win].winbar = vim.fn.fnamemodify(name, ':t'):gsub('%%', '%%%%') end
 end
@@ -126,11 +129,19 @@ local function write(s, p, lines, full, display_map)
   vim.bo[p.buf].readonly = true
   vim.b[p.buf].godbolt_full_output = full
   vim.b[p.buf].godbolt_line_map = display_map
+  if p.format == 'asm' then
+    local ok, err = pcall(assembly.write, p, valid_buf(s.source) and vim.api.nvim_buf_get_name(s.source) or '[no source]', lines)
+    if not ok then
+      assembly.cleanup(p)
+      vim.notify('[Godbolt] Temporary assembly file: ' .. tostring(err), vim.log.levels.ERROR)
+    end
+  end
   title(s, p)
   s.internal = false
 end
 
 local function placeholder(s, p, message)
+  if p.format == 'asm' then assembly.detach(p) end
   p.forward, p.reverse, p.ready_key = {}, {}, nil
   clear(p.buf, s.cursor_ns)
   clear(p.buf, s.static_ns)
@@ -188,6 +199,7 @@ local function render(s, p, data, key)
     if row then p.reverse[row] = location end
   end
   p.ready_key, p.want_open = key, false
+  if p.format == 'asm' then assembly.attach(p, s.source) end
   highlights(s)
   sync(s, s.source_win)
   if p.focus then vim.api.nvim_set_current_win(p.win) end
@@ -419,6 +431,7 @@ local function install()
           local p = s.panes[format]
           if p and p.win == win then
             s.panes[format] = nil
+            if p.format == 'asm' then assembly.cleanup(p) end
             vim.schedule(function() if valid_buf(p.buf) then vim.api.nvim_buf_delete(p.buf, { force = true }) end end)
             highlights(s)
             if next(s.panes) == nil then
@@ -432,6 +445,9 @@ local function install()
   end })
   vim.api.nvim_create_autocmd('BufWipeout', { group = group, callback = function(args)
     for _, s in pairs(sessions) do
+      for _, p in pairs(s.panes) do
+        if p.buf == args.buf and p.format == 'asm' then assembly.cleanup(p) end
+      end
       if s.source == args.buf then
         clear(s.source, s.static_ns)
         clear(s.source, s.cursor_ns)
@@ -447,10 +463,16 @@ local function install()
   vim.api.nvim_create_autocmd('TabClosed', { group = group, callback = function()
     for tab, s in pairs(sessions) do
       if not vim.api.nvim_tabpage_is_valid(tab) then
+        for _, p in pairs(s.panes) do if p.format == 'asm' then assembly.cleanup(p) end end
         sessions[tab] = nil
         clear(s.source, s.static_ns)
         clear(s.source, s.cursor_ns)
       end
+    end
+  end })
+  vim.api.nvim_create_autocmd('VimLeavePre', { group = group, callback = function()
+    for _, s in pairs(sessions) do
+      for _, p in pairs(s.panes) do if p.format == 'asm' then assembly.cleanup(p) end end
     end
   end })
 end
@@ -503,6 +525,7 @@ function M.close()
   for _, format in ipairs(formats) do
     local p = s.panes[format]
     if p then
+      if p.format == 'asm' then assembly.cleanup(p) end
       if valid_win(p.win) then
         if #vim.api.nvim_tabpage_list_wins(tab) > 1 then vim.api.nvim_win_close(p.win, true)
         else vim.api.nvim_win_set_buf(p.win, vim.api.nvim_create_buf(true, false)) end
